@@ -1,7 +1,7 @@
 package decoder
 
 import (
-	"binary"
+	"encoding/binary"
 	"fmt"
 	"strconv"
 	"unsafe"

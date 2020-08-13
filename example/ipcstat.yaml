@@ -1,0 +1,32 @@
+programs:
+  # See:
+  # * http://www.brendangregg.com/blog/2017-05-09/cpu-utilization-is-wrong.html
+  - name: ipcstat
+    metrics:
+      counters:
+        - name: cpu_instructions_total
+          help: Instructions retired by CPUs
+          table: instructions
+          labels:
+            - name: cpu
+              size: 4
+              decoders:
+                - name: uint
+        - name: cpu_cycles_total
+          help: Cycles processed by CPUs
+          table: cycles
+          labels:
+            - name: cpu
+              size: 4
+              decoders:
+                - name: uint
+    perf_events:
+      - type: 0x0 # HARDWARE
+        name: 0x1 # PERF_COUNT_HW_INSTRUCTIONS
+        target: on_cpu_instruction
+        sample_frequency: 99
+      - type: 0x0 # HARDWARE
+        name: 0x0 # PERF_COUNT_HW_CPU_CYCLES
+        target: on_cpu_cycle
+        sample_frequency: 99
+    elf: ipcstat.elf

@@ -1,9 +1,15 @@
 package exporter
 
 import (
+	"bytes"
+	"encoding/hex"
 	"fmt"
+	"golang.org/x/sys/unix"
+	"io/ioutil"
 	"log"
+	"math"
 	"net/http"
+	"os"
 	"strconv"
 
 	"github.com/ismhong/ebpf/manager"
@@ -18,7 +24,7 @@ const prometheusNamespace = "ebpf_exporter"
 // Exporter is a ebpf_exporter instance implementing prometheus.Collector
 type Exporter struct {
 	config              config.Config
-	modules             map[string]*manager.Manager
+	managers            map[string]*manager.Manager
 	ksyms               map[uint64]string
 	enabledProgramsDesc *prometheus.Desc
 	programInfoDesc     *prometheus.Desc
@@ -45,7 +51,7 @@ func New(config config.Config) *Exporter {
 
 	return &Exporter{
 		config:              config,
-		modules:             map[string]*manager.Manager{},
+		managers:            map[string]*manager.Manager{},
 		ksyms:               map[uint64]string{},
 		enabledProgramsDesc: enabledProgramsDesc,
 		programInfoDesc:     programInfoDesc,
@@ -57,38 +63,77 @@ func New(config config.Config) *Exporter {
 
 // Attach injects eBPF into kernel and attaches necessary kprobes
 func (e *Exporter) Attach() error {
-	//for _, program := range e.config.Programs {
-	//if _, ok := e.modules[program.Name]; ok {
-	//return fmt.Errorf("multiple programs with name %q", program.Name)
-	//}
+	for _, program := range e.config.Programs {
+		if _, ok := e.managers[program.Name]; ok {
+			return fmt.Errorf("multiple programs with name %q", program.Name)
+		}
 
-	//module := bcc.NewModule(program.Code, program.Cflags)
-	//if module == nil {
-	//return fmt.Errorf("error compiling module for program %q", program.Name)
-	//}
+		tags := map[string]uint64{}
+		m := &manager.Manager{}
 
-	//tags, err := attach(module, program.Kprobes, program.Kretprobes, program.Tracepoints, program.RawTracepoints)
+		for _, tracepoint := range program.Tracepoints {
+			p := &manager.Probe{}
+			p.Section = tracepoint
+			m.Probes = append(m.Probes, p)
+		}
 
-	//if err != nil {
-	//return fmt.Errorf("failed to attach to program %q: %s", program.Name, err)
-	//}
+		for _, rawTracepoint := range program.RawTracepoints {
+			p := &manager.Probe{}
+			p.Section = rawTracepoint
+			m.Probes = append(m.Probes, p)
+		}
 
-	//e.programTags[program.Name] = tags
+		for _, kprobe := range program.Kprobes {
+			p := &manager.Probe{}
+			p.Section = kprobe
+			m.Probes = append(m.Probes, p)
+		}
 
-	//for _, perfEventConfig := range program.PerfEvents {
-	//target, err := module.LoadPerfEvent(perfEventConfig.Target)
-	//if err != nil {
-	//return fmt.Errorf("failed to load target %q in program %q: %s", perfEventConfig.Target, program.Name, err)
-	//}
+		for _, kretprobe := range program.Kretprobes {
+			p := &manager.Probe{}
+			p.Section = kretprobe
+			m.Probes = append(m.Probes, p)
+		}
 
-	//err = module.AttachPerfEvent(perfEventConfig.Type, perfEventConfig.Name, perfEventConfig.SamplePeriod, perfEventConfig.SampleFrequency, -1, -1, -1, target)
-	//if err != nil {
-	//return fmt.Errorf("failed to attach perf event %d:%d to %q in program %q: %s", perfEventConfig.Type, perfEventConfig.Name, perfEventConfig.Target, program.Name, err)
-	//}
-	//}
+		for _, perfevent := range program.PerfEvents {
+			p := &manager.Probe{}
+			p.Section = "perf_event/" + perfevent.Target
+			p.PerfEventSampleFrequency = uint64(perfevent.SampleFrequency)
+			p.PerfEventSamplePeriod = uint64(perfevent.SamplePeriod)
+			p.PerfEventType = uint(perfevent.Type)
+			p.PerfEventConfig = uint(perfevent.Name)
+			p.PerfEventCpuId = -1
+			p.PerfEventPid = -1
+			m.Probes = append(m.Probes, p)
+		}
 
-	//e.modules[program.Name] = module
-	//}
+		pwd, _ := os.Getwd()
+		fmt.Printf("Open elf file %s\n", pwd+"/"+program.ElfFile)
+		elfFile, err := ioutil.ReadFile(pwd + "/" + program.ElfFile)
+		if err != nil {
+			return fmt.Errorf("Can't open bpf ELF file for program name %q", program.Name)
+		}
+
+		options := manager.Options{
+			RLimit: &unix.Rlimit{
+				Cur: math.MaxUint64,
+				Max: math.MaxUint64,
+			},
+		}
+
+		// Initialize the manager
+		if err := m.InitWithOptions(bytes.NewReader(elfFile), options); err != nil {
+			return fmt.Errorf("Can't init bpf manager for program name %q", program.Name)
+		}
+
+		// Start the manager
+		if err := m.Start(); err != nil {
+			return fmt.Errorf("Can't start bpf manager for program name %q, error(%q)", program.Name, err)
+		}
+
+		e.programTags[program.Name] = tags
+		e.managers[program.Name] = m
+	}
 
 	return nil
 }
@@ -148,7 +193,7 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 func (e *Exporter) collectCounters(ch chan<- prometheus.Metric) {
 	for _, program := range e.config.Programs {
 		for _, counter := range program.Metrics.Counters {
-			tableValues, err := e.tableValues(e.modules[program.Name], counter.Table, counter.Labels)
+			tableValues, err := e.tableValues(e.managers[program.Name], counter.Table, counter.Labels)
 			if err != nil {
 				log.Printf("Error getting table %q values for metric %q of program %q: %s", counter.Table, counter.Name, program.Name, err)
 				continue
@@ -171,7 +216,7 @@ func (e *Exporter) collectHistograms(ch chan<- prometheus.Metric) {
 
 			histograms := map[string]histogramWithLabels{}
 
-			tableValues, err := e.tableValues(e.modules[program.Name], histogram.Table, histogram.Labels)
+			tableValues, err := e.tableValues(e.managers[program.Name], histogram.Table, histogram.Labels)
 			if err != nil {
 				log.Printf("Error getting table %q values for metric %q of program %q: %s", histogram.Table, histogram.Name, program.Name, err)
 				continue
@@ -233,37 +278,38 @@ func (e *Exporter) collectHistograms(ch chan<- prometheus.Metric) {
 }
 
 // tableValues returns values in the requested table to be used in metircs
-func (e *Exporter) tableValues(module *manager.Manager, tableName string, labels []config.Label) ([]metricValue, error) {
-	//values := []metricValue{}
+func (e *Exporter) tableValues(manager *manager.Manager, tableName string, labels []config.Label) ([]metricValue, error) {
+	values := []metricValue{}
 
-	//table := bcc.NewTable(module.TableId(tableName), module)
-	//iter := table.Iter()
+	bpfMap, ok, err := manager.GetMap(tableName)
+	if err != nil || ok != true {
+		return nil, fmt.Errorf("error to find map %v", tableName)
+	}
 
-	//for iter.Next() {
-	//key := iter.Key()
-	//raw, err := table.KeyBytesToStr(key)
-	//if err != nil {
-	//return nil, fmt.Errorf("error decoding key %v", key)
-	//}
+	entries := bpfMap.Iterate()
+	var key, val []byte
+	for entries.Next(&key, &val) {
 
-	//mv := metricValue{
-	//raw:    raw,
-	//labels: make([]string, len(labels)),
-	//}
+		raw := hex.EncodeToString(key)
 
-	//mv.labels, err = e.decoders.DecodeLabels(key, labels)
-	//if err != nil {
-	//if err == decoder.ErrSkipLabelSet {
-	//continue
-	//}
+		mv := metricValue{
+			raw:    raw,
+			labels: make([]string, len(labels)),
+		}
 
-	//return nil, err
-	//}
+		mv.labels, err = e.decoders.DecodeLabels(key, labels)
+		if err != nil {
+			if err == decoder.ErrSkipLabelSet {
+				continue
+			}
 
-	//mv.value = float64(decoder.GetHostByteOrder().Uint64(iter.Leaf()))
+			return nil, err
+		}
 
-	//values = append(values, mv)
-	//}
+		mv.value = float64(decoder.GetHostByteOrder().Uint64(val))
+
+		values = append(values, mv)
+	}
 
 	return values, nil
 }
@@ -272,7 +318,7 @@ func (e Exporter) exportTables() (map[string]map[string][]metricValue, error) {
 	tables := map[string]map[string][]metricValue{}
 
 	for _, program := range e.config.Programs {
-		module := e.modules[program.Name]
+		module := e.managers[program.Name]
 		if module == nil {
 			return nil, fmt.Errorf("module for program %q is not attached", program.Name)
 		}
@@ -296,7 +342,7 @@ func (e Exporter) exportTables() (map[string]map[string][]metricValue, error) {
 		}
 
 		for name, labels := range metricTables {
-			metricValues, err := e.tableValues(e.modules[program.Name], name, labels)
+			metricValues, err := e.tableValues(e.managers[program.Name], name, labels)
 			if err != nil {
 				return nil, fmt.Errorf("error getting values for table %q of program %q: %s", name, program.Name, err)
 			}
