@@ -5,16 +5,18 @@ ARCH := __x86_64__
 CLANG_INCLUDE := -Iebpf_prog
 CFLAGS := -D$(ARCH)
 
-EBPF_SOURCE := ebpf_prog/bio-tracepoints.c \
-			   ebpf_prog/ipcstat.c		   \
-			   ebpf_prog/llcstat.c 		   \
-			   ebpf_prog/cachestat.c 	   \
+EBPF_SOURCE := ebpf_prog/bio-tracepoints.c 		  	\
+			   ebpf_prog/ipcstat.c		   			\
+			   ebpf_prog/llcstat.c 		   			\
+			   ebpf_prog/cachestat.c 	   			\
+			   ebpf_prog/cachestat-complex.c 	   	\
 			   ebpf_prog/timers-raw-tracepoints.c
 
 EBPF_BINARY := bio-tracepoints.elf		   \
 			   ipcstat.elf				   \
 			   llcstat.elf 				   \
 			   cachestat.elf 			   \
+			   cachestat-complex.elf	   \
 			   timers-raw-tracepoints.elf
 
 EBPF_SOURCE_DIR := ebpf_prog
