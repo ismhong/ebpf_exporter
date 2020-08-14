@@ -27,7 +27,7 @@ struct timer_list {
 BPF_MAP_DEF(counts) = {
     .map_type = BPF_MAP_TYPE_HASH,
     .max_entries = MAX_ENTRY,
-    .key_size = sizeof(void *),
+    .key_size = sizeof(__u64),
     .value_size = sizeof(__u64),
 };
 BPF_MAP_ADD(counts);

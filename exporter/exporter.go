@@ -85,13 +85,13 @@ func (e *Exporter) Attach() error {
 
 		for _, kprobe := range program.Kprobes {
 			p := &manager.Probe{}
-			p.Section = kprobe
+			p.Section = "kprobe/" + kprobe
 			m.Probes = append(m.Probes, p)
 		}
 
 		for _, kretprobe := range program.Kretprobes {
 			p := &manager.Probe{}
-			p.Section = kretprobe
+			p.Section = "kretprobe/" + kretprobe
 			m.Probes = append(m.Probes, p)
 		}
 
