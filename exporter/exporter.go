@@ -73,13 +73,13 @@ func (e *Exporter) Attach() error {
 
 		for _, tracepoint := range program.Tracepoints {
 			p := &manager.Probe{}
-			p.Section = tracepoint
+			p.Section = "tracepoint/" + tracepoint
 			m.Probes = append(m.Probes, p)
 		}
 
 		for _, rawTracepoint := range program.RawTracepoints {
 			p := &manager.Probe{}
-			p.Section = rawTracepoint
+			p.Section = "raw_tracepoint/" + rawTracepoint
 			m.Probes = append(m.Probes, p)
 		}
 

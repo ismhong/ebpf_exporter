@@ -1,0 +1,15 @@
+programs:
+  - name: timers
+    metrics:
+      counters:
+        - name: timer_start_total
+          help: Timers fired in the kernel
+          table: counts
+          labels:
+            - name: function
+              size: 8
+              decoders:
+                - name: ksym
+    raw_tracepoints:
+      timer_start: timer_start
+    elf: timers-raw-tracepoints.elf

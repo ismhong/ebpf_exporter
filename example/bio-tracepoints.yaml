@@ -56,6 +56,6 @@ programs:
               decoders:
                 - name: uint
     tracepoints:
-      block:block_rq_issue: tracepoint/block/block_rq_issue
-      block:block_rq_complete: tracepoint/block/block_rq_complete
+      block:block_rq_issue: block/block_rq_issue
+      block:block_rq_complete: block/block_rq_complete
     elf: bio-tracepoints.elf

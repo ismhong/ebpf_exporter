@@ -3,6 +3,7 @@ package decoder
 import (
 	"fmt"
 
+	"github.com/iovisor/gobpf/pkg/ksym"
 	"github.com/ismhong/ebpf_exporter/config"
 )
 
@@ -19,14 +20,14 @@ func (k *KSym) Decode(in []byte, conf config.Decoder) ([]byte, error) {
 
 	addr := fmt.Sprintf("%x", GetHostByteOrder().Uint64(in))
 
-	//if _, ok := k.cache[addr]; !ok {
-	//name, err := ksym.Ksym(addr)
-	//if err != nil {
-	//return []byte(fmt.Sprintf("unknown_addr:0x%s", addr)), nil
-	//}
+	if _, ok := k.cache[addr]; !ok {
+		name, err := ksym.Ksym(addr)
+		if err != nil {
+			return []byte(fmt.Sprintf("unknown_addr:0x%s", addr)), nil
+		}
 
-	//k.cache[addr] = []byte(name)
-	//}
+		k.cache[addr] = []byte(name)
+	}
 
 	return k.cache[addr], nil
 }

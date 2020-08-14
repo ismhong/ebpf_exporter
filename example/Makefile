@@ -6,9 +6,11 @@ CLANG_INCLUDE := -Iebpf_prog
 CFLAGS := -D$(ARCH)
 
 EBPF_SOURCE := ebpf_prog/bio-tracepoints.c \
-			   ebpf_prog/ipcstat.c
+			   ebpf_prog/ipcstat.c		   \
+			   ebpf_prog/timers-raw-tracepoints.c
 EBPF_BINARY := bio-tracepoints.elf		   \
-			   ipcstat.elf
+			   ipcstat.elf				   \
+			   timers-raw-tracepoints.elf
 EBPF_SOURCE_DIR := ebpf_prog
 
 all: $(EBPF_BINARY)
