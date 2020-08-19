@@ -123,7 +123,7 @@ func (e *Exporter) Attach() error {
 
 		// Initialize the manager
 		if err := m.InitWithOptions(bytes.NewReader(elfFile), options); err != nil {
-			return fmt.Errorf("Can't init bpf manager for program name %q", program.Name)
+			return fmt.Errorf("Can't init bpf manager for program name %q\n%v", program.Name, err)
 		}
 
 		// Start the manager

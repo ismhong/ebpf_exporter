@@ -1,0 +1,24 @@
+programs:
+  # See:
+  # * https://github.com/iovisor/bcc/blob/master/tools/runqlat.py
+  # * https://github.com/iovisor/bcc/blob/master/tools/runqlat_example.txt
+  - name: runqlat
+    metrics:
+      histograms:
+        - name: run_queue_latency_seconds
+          help: Run queue latency histogram
+          table: run_queue_latency
+          bucket_type: exp2
+          bucket_min: 0
+          bucket_max: 26
+          bucket_multiplier: 0.000001 # microseconds to seconds
+          labels:
+            - name: bucket
+              size: 8
+              decoders:
+                - name: uint
+    raw_tracepoints:
+      sched_wakeup: sched_wakeup
+      sched_wakeup_new: sched_wakeup_new
+      sched_switch: sched_switch
+    elf: runqlat.elf
