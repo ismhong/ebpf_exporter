@@ -1,5 +1,5 @@
 CLANG := clang
-ARCH := __x86_64__
+ARCH ?= __x86_64__
 #ARCH := __aarch64__
 
 CLANG_INCLUDE :=
